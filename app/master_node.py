@@ -13,19 +13,15 @@ class MasterNode:
 
         self.client = mqtt.Client()
         self.client.on_message = self.on_message
-
         self.lock = threading.Lock()
 
     def start(self):
         self.client.connect(BROKER_ADDRESS, BROKER_PORT, 60)
-
         self.client.subscribe("station/+/neighbors")
         self.client.subscribe("station/+/version")
         self.client.subscribe("station/+/is_master")
-
         self.client.loop_start()
 
-        # Loop de verificação e reconstrução
         while True:
             time.sleep(60)
             self.verify_masters()
@@ -37,8 +33,7 @@ class MasterNode:
         payload = msg.payload.decode()
         try:
             if topic.endswith("/neighbors"):
-                station_id = topic.split("/")[1]
-                self.handle_neighbors(station_id, payload)
+                self.handle_neighbors(payload)
             elif topic.endswith("/version"):
                 self.handle_version(payload)
             elif topic.endswith("/is_master"):
@@ -46,11 +41,18 @@ class MasterNode:
         except Exception as e:
             print(f"[MASTER] Erro ao processar mensagem: {e}")
 
-    def handle_neighbors(self, station_id, payload):
+    def handle_neighbors(self, payload):
         data = json.loads(payload)
+        from_id = data.get("from")
+        neighbors = data.get("data")
+
+        if not from_id or not neighbors:
+            print(f"[MASTER] Payload inválido: {payload}")
+            return
+
         with self.lock:
-            self.measurements_raw[station_id] = data
-        print(f"[MASTER] Vizinhos de {station_id}: {data}")
+            self.measurements_raw[from_id] = neighbors
+        print(f"[MASTER] Vizinhos de {from_id}: {neighbors}")
 
     def handle_version(self, payload):
         data = json.loads(payload)
@@ -68,7 +70,7 @@ class MasterNode:
     def verify_masters(self):
         print(f"[MASTER] Mestres detectados: {self.detected_masters}")
         if len(self.detected_masters) > 1:
-            print("[MASTER]  Mais de um mestre detectado! Conflito.")
+            print("[MASTER] Mais de um mestre detectado! Conflito.")
 
     def verify_versions(self):
         latest_version = max(self.versions.values(), default=None)
@@ -80,11 +82,10 @@ class MasterNode:
                 })
                 topic = TOPICS["UPDATE_CMD"].format(id=node_id)
                 self.client.publish(topic, update_payload)
-                print(f"[MASTER]  Pedido de atualização enviado para {node_id}")
+                print(f"[MASTER] Pedido de atualização enviado para {node_id}")
 
     def reconstruct_topology(self):
         with self.lock:
-            # Montar input no formato de things.py
             input_structure = []
             for src_id, neighbor_list in self.measurements_raw.items():
                 edges = []
@@ -101,8 +102,7 @@ class MasterNode:
 
         self.client.publish(TOPICS["TOPOLOGY_POS"], json.dumps(positions))
         self.client.publish(TOPICS["TOPOLOGY_GRAPH"], json.dumps(graph))
-        print(f"[MASTER]  Topologia publicada com {len(positions)} posições.")
-
+        print(f"[MASTER] Topologia publicada com {len(positions)} posições.")
 
 if __name__ == "__main__":
     master = MasterNode()

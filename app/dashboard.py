@@ -1,3 +1,4 @@
+
 # pip install streamlit paho-mqtt networkx matplotlib
 
 import json
@@ -6,9 +7,10 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import paho.mqtt.client as mqtt
 import threading
+import time
 
 # --- Configurações
-BROKER = "localhost"
+BROKER = "localhost"  # altere para o IP do broker se estiver em outro dispositivo
 PORT = 1883
 
 TOPIC_POS = "topology/positions"
@@ -27,12 +29,12 @@ def on_message(client, userdata, msg):
     global positions, edges
     if msg.topic == TOPIC_POS:
         try:
-            positions = json.loads(msg.payload.decode())
+            positions.update(json.loads(msg.payload.decode()))
         except:
             pass
     elif msg.topic == TOPIC_GRAPH:
         try:
-            edges = json.loads(msg.payload.decode())
+            edges.update(json.loads(msg.payload.decode()))
         except:
             pass
 
@@ -47,19 +49,18 @@ def mqtt_thread():
 threading.Thread(target=mqtt_thread, daemon=True).start()
 
 # --- Interface Streamlit
-st.title("🔗 BLE Network Topology")
-
+st.title("BLE Network Topology")
 st.markdown("Este painel mostra a topologia atual estimada a partir das distâncias BLE.")
 
 with st.spinner("Aguardando dados MQTT..."):
-    st.sleep(1)
+    time.sleep(1)
 
 # --- Atualização dinâmica
 while True:
-    st.subheader(" Posições dos Nós")
+    st.subheader("Posições dos Nós")
     st.json(positions)
 
-    st.subheader(" Ligações (grafo)")
+    st.subheader("Ligações (grafo)")
     st.json(edges)
 
     if positions and edges:
@@ -76,9 +77,10 @@ while True:
         pos_dict = nx.get_node_attributes(G, 'pos')
 
         fig, ax = plt.subplots(figsize=(6, 6))
-        nx.draw(G, pos=pos_dict, with_labels=True, node_color='skyblue', node_size=1000, font_weight='bold', ax=ax)
+        nx.draw(G, pos=pos_dict, with_labels=True, node_color='skyblue',
+                node_size=1000, font_weight='bold', ax=ax)
         st.pyplot(fig)
 
     st.info("Este painel atualiza automaticamente a cada 10 segundos.")
-    st.sleep(10)
+    time.sleep(10)
     st.experimental_rerun()
