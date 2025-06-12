@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.optimize import minimize
 import collections
 import matplotlib.pyplot as plt 
 
